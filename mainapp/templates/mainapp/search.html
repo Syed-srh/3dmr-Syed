@@ -28,35 +28,110 @@
 			</h1>
 		</div>
 	</div>
-	{% if models %}
-	<div class="row flex">
-		{% for model in models %}
-			{% include "mainapp/modelpanel.html" %}
-		{% endfor %}
-	</div>
-	{% endif %}
-	{% if paginator %}
-	<div class="row" style="margin-bottom:30px;text-align:center;">
-		<div class="btn-group" role="group" aria-label="...">
-			{% for page in paginator.page_range %}
-			{% if page == page_id %}
-			<a class="btn btn-primary disabled">{{ page }}</a>
-			{% else %}
-			<a href="{% url 'search' %}{{ url_params }}&page={{ page }}" class="btn btn-default">{{ page }}</a>
-			{% endif %}
-			{% endfor %}
+
+	<!-- Filter UI -->
+	<div class="row align-items-center" style="margin-bottom: 20px;">
+		<div class="col-md-6 form-group">
+			<label for="category-filter">Filter by Category:</label>
+			<select id="category-filter" class="form-control">
+				<option value="">All Categories</option>
+				{% for cat in all_categories %}
+					<option value="{{ cat }}" {% if category == cat %}selected{% endif %}>{{ cat }}</option>
+				{% endfor %}
+			</select>
+		</div>
+		<div class="col-md-6 form-group">
+			<label for="tag-filter">Filter by Tag:</label>
+			<select id="tag-filter" class="form-control">
+				<option value="">All Tags</option>
+				{% for t in all_tags %}
+					<option value="{{ t }}" {% if tag == t %}selected{% endif %}>{{ t }}</option>
+				{% endfor %}
+			</select>
 		</div>
 	</div>
-	{% else %}
-	<p>No models were found with those parameters.</p>
-	{% endif %}
+
+	<div id="search-results-container">
+		{% if models %}
+		<div class="row flex">
+			{% for model in models %}
+				{% include "mainapp/modelpanel.html" %}
+			{% endfor %}
+		</div>
+		{% endif %}
+		{% if paginator %}
+		<div class="row" style="margin-bottom:30px;text-align:center;">
+			<div class="btn-group" role="group" aria-label="...">
+				{% for page in paginator.page_range %}
+				{% if page == page_id %}
+				<a class="btn btn-primary disabled">{{ page }}</a>
+				{% else %}
+				<a href="{% url 'search' %}{{ url_params }}&page={{ page }}" class="btn btn-default">{{ page }}</a>
+				{% endif %}
+				{% endfor %}
+			</div>
+		</div>
+		{% else %}
+		<p>No models were found with those parameters.</p>
+		{% endif %}
+	</div>
 </div>
 {% endblock %}
 {% block footeradditions %}
 {% vite_asset 'src/main.js' %}
 <script>
+	function updateSearchResults() {
+		const categoryFilter = document.getElementById("category-filter").value;
+		const tagFilter = document.getElementById("tag-filter").value;
+
+		// Get the current URL parameters
+		const urlParams = new URLSearchParams(window.location.search);
+		
+		// Update category and tag params
+		if (categoryFilter) {
+			urlParams.set("category", categoryFilter);
+		} else {
+			urlParams.delete("category");
+		}
+
+		if (tagFilter) {
+			urlParams.set("tag", tagFilter);
+		} else {
+			urlParams.delete("tag");
+		}
+
+		// Reset page to 1 when changing filters
+		urlParams.delete("page");
+
+		const searchUrl = "{% url 'search' %}?" + urlParams.toString();
+
+		// Fetch the updated search results
+		fetch(searchUrl)
+			.then(response => response.text())
+			.then(html => {
+				const parser = new DOMParser();
+				const doc = parser.parseFromString(html, "text/html");
+				const newContainer = doc.getElementById("search-results-container");
+
+				// Update the DOM
+				if (newContainer) {
+					document.getElementById("search-results-container").innerHTML = newContainer.innerHTML;
+					// Re-initialize the render panes inside the new elements
+					setUpRenderPane();
+				}
+			})
+			.catch(error => console.error("Error fetching search results:", error));
+	}
+
 	window.addEventListener("load", function() {
 		setUpRenderPane();
+
+		// Attach event listeners to the filters
+		const categoryFilter = document.getElementById("category-filter");
+		const tagFilter = document.getElementById("tag-filter");
+		
+		if (categoryFilter) categoryFilter.addEventListener("change", updateSearchResults);
+		if (tagFilter) tagFilter.addEventListener("change", updateSearchResults);
 	});
 </script>
 {% endblock %}

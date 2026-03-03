@@ -151,6 +151,16 @@ def search(request):
         except EmptyPage:
             results = []
 
+    all_categories = Category.objects.all().values_list('name', flat=True)
+    
+    # Extract unique tags from all latest models
+    all_tags = set()
+    for m in Model.objects.filter(latest=True):
+        if m.tags:
+            for k, v in m.tags.items():
+                all_tags.add(f"{k}={v}")
+    all_tags = sorted(list(all_tags))
+
     context = {
         'query': query,
         'tag': tag,
@@ -158,7 +168,9 @@ def search(request):
         'models': results,
         'paginator': paginator,
         'page_id': page_id,
-        'url_params': url_params
+        'url_params': url_params,
+        'all_categories': all_categories,
+        'all_tags': all_tags
     }
 
     return render(request, 'mainapp/search.html', context)
