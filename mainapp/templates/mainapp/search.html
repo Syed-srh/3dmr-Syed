@@ -117,14 +117,18 @@
 				if (newContainer) {
 					document.getElementById("search-results-container").innerHTML = newContainer.innerHTML;
 					// Re-initialize the render panes inside the new elements
-					setUpRenderPane();
+					if (typeof setUpRenderPane === "function") {
+						setUpRenderPane();
+					}
 				}
 			})
 			.catch(error => console.error("Error fetching search results:", error));
 	}
 
 	window.addEventListener("load", function() {
-		setUpRenderPane();
+		if (typeof setUpRenderPane === "function") {
+			setUpRenderPane();
+		}
 
 		// Attach event listeners to the filters
 		const categoryFilter = document.getElementById("category-filter");

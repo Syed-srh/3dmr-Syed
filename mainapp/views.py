@@ -8,7 +8,8 @@ from social_django.models import UserSocialAuth
 from django.contrib.auth.models import User
 from django.contrib.auth import logout
 from django.contrib import messages
-from django.db import transaction
+from django.db import transaction, connection
+from django.db.models import Q
 from .models import Model, Category, Change, Ban, Location
 from .forms import UploadFileForm, UploadFileMetadataForm, MetadataForm, UserDescriptionForm
 from .utils import get_kv, update_last_page, get_last_page, CHANGES, admin, LICENSES_DISPLAY
@@ -108,37 +109,49 @@ def search(request):
     except ValueError:
         page_id = 1
 
-    url_params = '?'
+    if not (query or tag or category):
+        return redirect(index)
 
+    url_param_parts = []
     if query:
-        url_params += 'query=' + query
+        url_param_parts.append(f"query={query}")
     if tag:
-        url_params += 'tag=' + tag
+        url_param_parts.append(f"tag={tag}")
     if category:
-        url_params += 'category=' + category
+        url_param_parts.append(f"category={category}")
+    url_params = "?" + "&".join(url_param_parts)
 
     models = Model.objects.filter(latest=True)
 
-    if tag:
-        try:
-            key, value = get_kv(tag)
-        except ValueError:
-            return redirect(index)
-        filtered_models = models.filter(tags__contains={key: value})
-    elif category:
-        filtered_models = models.filter(categories__name=category)
-    elif query:
-        filtered_models = \
-            models.filter(title__icontains=query) | \
-            models.filter(description__icontains=query)
-
     try:
+        filtered_models = models
+
+        # Apply filters cumulatively so combinations like ?query=tower&category=building work.
+        if query:
+            filtered_models = filtered_models.filter(
+                Q(title__icontains=query) | Q(description__icontains=query)
+            )
+
+        if category:
+            filtered_models = filtered_models.filter(categories__name=category)
+
+        if tag:
+            try:
+                key, value = get_kv(tag)
+            except ValueError:
+                return redirect(index)
+            # Postgres supports JSONField contains; SQLite doesn't.
+            if connection.vendor == "sqlite":
+                filtered_models = filtered_models.filter(**{f"tags__{key}": value})
+            else:
+                filtered_models = filtered_models.filter(tags__contains={key: value})
+
         if not admin(request):
             filtered_models = filtered_models.filter(is_hidden=False)
 
         ordered_models = filtered_models.order_by('-pk')
-    except UnboundLocalError:
-        # filtered_models isn't set, redirect to homepage
+    except Exception:
+        # Fallback to homepage on unexpected search errors
         return redirect(index)
 
     if not ordered_models:

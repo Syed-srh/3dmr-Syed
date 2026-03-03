@@ -5,6 +5,70 @@ from django.conf import settings
 from django.db import migrations, models
 
 
+def _forwards_drop_legacy_latestmodel_views(apps, schema_editor):
+    """
+    Legacy schema cleanup.
+
+    - Postgres used a MATERIALIZED VIEW for mainapp_latestmodel.
+    - SQLite (local dev/test) doesn't support MATERIALIZED VIEW syntax.
+    """
+    vendor = schema_editor.connection.vendor
+    if vendor == "postgresql":
+        schema_editor.execute("DROP MATERIALIZED VIEW IF EXISTS mainapp_latestmodel;")
+        schema_editor.execute("DROP VIEW IF EXISTS mainapp_latestmodel_categories;")
+    else:
+        schema_editor.execute("DROP VIEW IF EXISTS mainapp_latestmodel;")
+        schema_editor.execute("DROP VIEW IF EXISTS mainapp_latestmodel_categories;")
+
+
+def _backwards_recreate_legacy_latestmodel_views(apps, schema_editor):
+    vendor = schema_editor.connection.vendor
+    if vendor != "postgresql":
+        return
+
+    schema_editor.execute(
+        """
+        CREATE MATERIALIZED VIEW mainapp_latestmodel AS
+        SELECT
+            model.id AS id,
+            model.model_id AS model_id,
+            model.revision AS revision,
+            model.title AS title,
+            model.description AS description,
+            model.rendered_description AS rendered_description,
+            model.upload_date AS upload_date,
+            model.location_id as location_id,
+            model.license AS license,
+            model.rotation AS rotation,
+            model.scale AS scale,
+            model.translation_x AS translation_x,
+            model.translation_y AS translation_y,
+            model.translation_z AS translation_z,
+            model.author_id AS author_id,
+            model.tags AS tags,
+            model.is_hidden AS is_hidden
+        FROM mainapp_model model
+            LEFT JOIN mainapp_model newer
+                ON model.model_id = newer.model_id AND
+                   model.revision < newer.revision
+        WHERE newer.revision is NULL;
+        """
+    )
+    schema_editor.execute(
+        "CREATE UNIQUE INDEX mainapp_latestmodel_id_idx ON mainapp_latestmodel (id);"
+    )
+    schema_editor.execute(
+        """
+        CREATE VIEW mainapp_latestmodel_categories AS
+        SELECT
+            id AS id,
+            model_id AS latestmodel_id,
+            category_id AS category_id
+        FROM mainapp_model_categories;
+        """
+    )
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -13,46 +77,9 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunSQL(
-            sql="""
-                DROP MATERIALIZED VIEW IF EXISTS mainapp_latestmodel;
-                DROP VIEW IF EXISTS mainapp_latestmodel_categories;
-            """,
-            reverse_sql="""
-                CREATE MATERIALIZED VIEW mainapp_latestmodel AS
-                SELECT
-                    model.id AS id,
-                    model.model_id AS model_id,
-                    model.revision AS revision,
-                    model.title AS title,
-                    model.description AS description,
-                    model.rendered_description AS rendered_description,
-                    model.upload_date AS upload_date,
-                    model.location_id as location_id,
-                    model.license AS license,
-                    model.rotation AS rotation,
-                    model.scale AS scale,
-                    model.translation_x AS translation_x,
-                    model.translation_y AS translation_y,
-                    model.translation_z AS translation_z,
-                    model.author_id AS author_id,
-                    model.tags AS tags,
-                    model.is_hidden AS is_hidden
-                FROM mainapp_model model
-                    LEFT JOIN mainapp_model newer
-                        ON model.model_id = newer.model_id AND
-                           model.revision < newer.revision
-                WHERE newer.revision is NULL;
-
-                CREATE UNIQUE INDEX mainapp_latestmodel_id_idx ON mainapp_latestmodel (id);
-
-                CREATE VIEW mainapp_latestmodel_categories AS
-                SELECT
-                    id AS id,
-                    model_id AS latestmodel_id,
-                    category_id AS category_id
-                FROM mainapp_model_categories;
-            """
+        migrations.RunPython(
+            _forwards_drop_legacy_latestmodel_views,
+            _backwards_recreate_legacy_latestmodel_views,
         ),
         migrations.DeleteModel(
             name='LatestModel',
