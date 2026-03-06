@@ -16,15 +16,15 @@
 	<div class="col-12">
 		<div class="page-header">
 			<h1>Search Results
-			{% if query %}
-			<small>'{{ query }}'{% if tag or category %},{% endif %}</small>
-			{% endif %}
-			{% if category %}
-			<small>category '{{ category }}'{% if tag %},{% endif %}</small>
-			{% endif %}
-			{% if tag %}
-			<small>tag '{{ tag }}'</small>
-			{% endif %}
+				{% if query %}
+				<small>'{{ query }}'{% if tag or category %},{% endif %}</small>
+				{% endif %}
+				{% if category %}
+				<small>category '{{ category }}'{% if tag %},{% endif %}</small>
+				{% endif %}
+				{% if tag %}
+				<small>tag '{{ tag }}'</small>
+				{% endif %}
 			</h1>
 		</div>
 	</div>
@@ -36,7 +36,7 @@
 			<select id="category-filter" class="form-control">
 				<option value="">All Categories</option>
 				{% for cat in all_categories %}
-					<option value="{{ cat }}" {% if category == cat %}selected{% endif %}>{{ cat }}</option>
+				<option value="{{ cat }}" {% if category==cat %}selected{% endif %}>{{ cat }}</option>
 				{% endfor %}
 			</select>
 		</div>
@@ -45,17 +45,27 @@
 			<select id="tag-filter" class="form-control">
 				<option value="">All Tags</option>
 				{% for t in all_tags %}
-					<option value="{{ t }}" {% if tag == t %}selected{% endif %}>{{ t }}</option>
+				<option value="{{ t }}" {% if tag==t %}selected{% endif %}>{{ t }}</option>
 				{% endfor %}
 			</select>
 		</div>
 	</div>
 
+	<div class="row">
+		<div class="col-12 text-right" style="margin-top: 10px;">
+			<a href="{% url 'search' %}?query={{ query }}" class="btn btn-sm btn-default">
+				<i class="fa fa-refresh"></i> Clear All Filters
+			</a>
+		</div>
+	</div>
+
+
+
 	<div id="search-results-container">
 		{% if models %}
 		<div class="row flex">
 			{% for model in models %}
-				{% include "mainapp/modelpanel.html" %}
+			{% include "mainapp/modelpanel.html" %}
 			{% endfor %}
 		</div>
 		{% endif %}
@@ -86,7 +96,7 @@
 
 		// Get the current URL parameters
 		const urlParams = new URLSearchParams(window.location.search);
-		
+
 		// Update category and tag params
 		if (categoryFilter) {
 			urlParams.set("category", categoryFilter);
@@ -104,6 +114,9 @@
 		urlParams.delete("page");
 
 		const searchUrl = "{% url 'search' %}?" + urlParams.toString();
+
+		// Update the URL in the address bar dynamically
+		window.history.pushState(null, '', searchUrl);
 
 		// Fetch the updated search results
 		fetch(searchUrl)
@@ -123,15 +136,22 @@
 			.catch(error => console.error("Error fetching search results:", error));
 	}
 
-	window.addEventListener("load", function() {
+	window.addEventListener("load", function () {
 		setUpRenderPane();
 
 		// Attach event listeners to the filters
 		const categoryFilter = document.getElementById("category-filter");
 		const tagFilter = document.getElementById("tag-filter");
-		
+
 		if (categoryFilter) categoryFilter.addEventListener("change", updateSearchResults);
 		if (tagFilter) tagFilter.addEventListener("change", updateSearchResults);
+
+		// Handle browser Back/Forward navigation
+		window.addEventListener("popstate", function () {
+			window.location.reload();
+		});
 	});
+
+
 </script>
 {% endblock %}
