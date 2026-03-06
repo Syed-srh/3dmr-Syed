@@ -89,69 +89,94 @@
 {% endblock %}
 {% block footeradditions %}
 {% vite_asset 'src/main.js' %}
-<script>
-	function updateSearchResults() {
-		const categoryFilter = document.getElementById("category-filter").value;
-		const tagFilter = document.getElementById("tag-filter").value;
 
-		// Get the current URL parameters
+<script>
+	/**
+	 * Updates the search results dynamically using AJAX without a full page reload.
+	 * This addresses Issue #82 by making filters accessible and reactive.
+	 */
+	function updateSearchResults() {
+		const categoryFilter = document.getElementById("category-filter");
+		const tagFilter = document.getElementById("tag-filter");
+
+		// Ensure elements exist before accessing values
+		const categoryValue = categoryFilter ? categoryFilter.value : "";
+		const tagValue = tagFilter ? tagFilter.value : "";
+
+		// Use URLSearchParams to cleanly manage the query string
 		const urlParams = new URLSearchParams(window.location.search);
 
-		// Update category and tag params
-		if (categoryFilter) {
-			urlParams.set("category", categoryFilter);
+		// Update category and tag params based on user selection
+		if (categoryValue) {
+			urlParams.set("category", categoryValue);
 		} else {
 			urlParams.delete("category");
 		}
 
-		if (tagFilter) {
-			urlParams.set("tag", tagFilter);
+		if (tagValue) {
+			urlParams.set("tag", tagValue);
 		} else {
 			urlParams.delete("tag");
 		}
 
-		// Reset page to 1 when changing filters
+		// Reset to page 1 whenever a filter is changed to avoid empty results on high page numbers
 		urlParams.delete("page");
 
+		// Construct the final URL using the Django template tag for the search endpoint
 		const searchUrl = "{% url 'search' %}?" + urlParams.toString();
 
-		// Update the URL in the address bar dynamically
-		window.history.pushState(null, '', searchUrl);
+		// Update the browser's address bar so the URL can be shared/bookmarked
+		window.history.pushState({ path: searchUrl }, '', searchUrl);
 
-		// Fetch the updated search results
+		// Fetch the new HTML content for the results section
 		fetch(searchUrl)
-			.then(response => response.text())
+			.then(response => {
+				if (!response.ok) throw new Error("Network response was not ok");
+				return response.text();
+			})
 			.then(html => {
 				const parser = new DOMParser();
 				const doc = parser.parseFromString(html, "text/html");
 				const newContainer = doc.getElementById("search-results-container");
+				const currentContainer = document.getElementById("search-results-container");
 
-				// Update the DOM
-				if (newContainer) {
-					document.getElementById("search-results-container").innerHTML = newContainer.innerHTML;
-					// Re-initialize the render panes inside the new elements
-					setUpRenderPane();
+				// Swap only the results container to provide a smooth transition
+				if (newContainer && currentContainer) {
+					currentContainer.innerHTML = newContainer.innerHTML;
+
+					// Re-initialize any 3D previews or specific scripts needed for the new items
+					if (typeof setUpRenderPane === "function") {
+						setUpRenderPane();
+					}
 				}
 			})
-			.catch(error => console.error("Error fetching search results:", error));
+			.catch(error => console.error("Error fetching filtered search results:", error));
 	}
 
+	// Initialize listeners when the window loads
 	window.addEventListener("load", function () {
-		setUpRenderPane();
+		// Run initial setup for existing elements
+		if (typeof setUpRenderPane === "function") {
+			setUpRenderPane();
+		}
 
-		// Attach event listeners to the filters
+		// Identify filter elements
 		const categoryFilter = document.getElementById("category-filter");
 		const tagFilter = document.getElementById("tag-filter");
 
-		if (categoryFilter) categoryFilter.addEventListener("change", updateSearchResults);
-		if (tagFilter) tagFilter.addEventListener("change", updateSearchResults);
+		// Attach "change" listeners to trigger the updateSearchResults function
+		if (categoryFilter) {
+			categoryFilter.addEventListener("change", updateSearchResults);
+		}
+		if (tagFilter) {
+			tagFilter.addEventListener("change", updateSearchResults);
+		}
 
-		// Handle browser Back/Forward navigation
+		// Ensure browser "Back" and "Forward" buttons reload the state correctly
 		window.addEventListener("popstate", function () {
 			window.location.reload();
 		});
 	});
-
-
 </script>
+
 {% endblock %}
